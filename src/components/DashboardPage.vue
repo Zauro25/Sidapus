@@ -24,7 +24,7 @@
           <span v-if="hasUnreadNotifications" class="notification-dot"></span>
         </div>
         <div class="profile-btn" @click="goToSettings">
-          <span>Admin Perpustakaan</span>
+          <span>{{ profileLabel }}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>
@@ -41,14 +41,29 @@
           <button class="nav-btn active">
             <span>Dashboard</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('input-update')">
+          <button v-if="isAdminPerpustakaan" class="nav-btn" @click="navigateTo('input-update')">
             <span>Input & Update Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('pengiriman')">
+          <button v-if="isAdminPerpustakaan" class="nav-btn" @click="navigateTo('pengiriman')">
             <span>Pengiriman Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('validasi')">
-            <span>Validasi dan Revisi dari DPK</span>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/verifikasi-user')">
+            <span>Verifikasi Admin Perpus</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/verifikasi-data')">
+            <span>Verifikasi Data</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/laporan')">
+            <span>Laporan</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/pengaturan-akun')">
+            <span>Pengaturan Akun</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/profile')">
+            <span>Profile Pengguna</span>
+          </button>
+          <button class="nav-btn" @click="navigateTo('notifications')">
+            <span>Notifikasi</span>
           </button>
         </nav>
         <button class="sidebar-logout-btn" @click="logout">
@@ -127,6 +142,7 @@
 
 <script>
 import Chart from 'chart.js/auto'
+import api from '../api/axios'
 
 export default {
   data() {
@@ -137,6 +153,8 @@ export default {
       notifications: [],
       totalLibraries: 0,
       totalStaff: 0,
+      userType: '',
+      profileLabel: 'Pengguna',
       isSidebarOpen: false,
       isMobile: false,
       charts: {
@@ -147,7 +165,28 @@ export default {
       }
     }
   },
+  computed: {
+    isAdminPerpustakaan() {
+      return this.userType === 'admin_perpustakaan'
+    },
+    isAdminDPK() {
+      return this.userType === 'admin_dpk'
+    }
+  },
   async created() {
+    this.userType = localStorage.getItem('userType') || sessionStorage.getItem('userType') || ''
+    const userDataRaw = localStorage.getItem('userData') || sessionStorage.getItem('userData')
+    if (userDataRaw) {
+      try {
+        const userData = JSON.parse(userDataRaw)
+        this.profileLabel = userData.nama_lengkap || userData.username || this.userType
+      } catch {
+        this.profileLabel = this.userType
+      }
+    } else {
+      this.profileLabel = this.userType || 'Pengguna'
+    }
+
     await this.fetchDashboardData()
     await this.fetchNotifications()
     this.checkMobile()
@@ -184,26 +223,36 @@ export default {
     },
     async fetchDashboardData() {
       try {
-        const response = await fetch(`/api/dashboard-data?semester=${this.selectedSemester}`)
-        const data = await response.json()
-        
-        this.totalLibraries = data.totalLibraries || 0
-        this.totalStaff = data.totalStaff || 0
-        
-        this.updateCharts(data)
+        const endpointByRole = {
+          admin_perpustakaan: '/admin-perpustakaan/dashboard',
+          admin_dpk: '/admin-dpk/dashboard',
+          executive: '/executive/dashboard'
+        }
+
+        const endpoint = endpointByRole[this.userType] || '/admin-perpustakaan/dashboard'
+        const response = await api.get(endpoint)
+        const dashboardData = response.data || {}
+        const stats = dashboardData.statistics || {}
+
+        this.totalLibraries = stats.TotalPerpustakaan || 0
+        this.totalStaff = stats.TotalSDM || 0
+
+        this.updateCharts({
+          visitorData: [stats.TotalPengunjung || 0],
+          memberData: [stats.TotalAnggota || 0],
+          trendData: [stats.TotalPengunjung || 0, stats.TotalAnggota || 0],
+          verificationData: [stats.PendingVerifikasi || 0, 0, 0],
+          libraryTypeData: [stats.TotalPerpustakaan || 0, 0, 0]
+        })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
       }
     },
     async fetchNotifications() {
       try {
-        const response = await fetch('/api/notifications')
-        const data = await response.json()
-        this.notifications = data.notifications || [
-          { id: 1, message: 'Data perpustakaan baru telah ditambahkan', time: '5 menit yang lalu', read: false },
-          { id: 2, message: 'Validasi data menunggu persetujuan', time: '1 jam yang lalu', read: false }
-        ]
-        this.hasUnreadNotifications = this.notifications.some(n => !n.read)
+        const response = await api.get('/notifications', { params: { limit: 10 } })
+        this.notifications = Array.isArray(response.data) ? response.data : []
+        this.hasUnreadNotifications = this.notifications.some(n => !n.is_read)
       } catch (error) {
         console.error('Error fetching notifications:', error)
       }
@@ -357,19 +406,19 @@ export default {
     },
     async readNotification(id) {
       try {
-        await fetch(`/api/notifications/${id}/read`, { method: 'POST' })
+        await api.put(`/notifications/${id}/read`)
         this.notifications = this.notifications.map(n => 
-          n.id === id ? { ...n, read: true } : n
+          n.id === id ? { ...n, is_read: true } : n
         )
-        this.hasUnreadNotifications = this.notifications.some(n => !n.read)
+        this.hasUnreadNotifications = this.notifications.some(n => !n.is_read)
       } catch (error) {
         console.error('Error marking notification as read:', error)
       }
     },
     async markAllAsRead() {
       try {
-        await fetch('/api/notifications/mark-all-read', { method: 'POST' })
-        this.notifications = this.notifications.map(n => ({ ...n, read: true }))
+        await api.put('/notifications/read-all')
+        this.notifications = this.notifications.map(n => ({ ...n, is_read: true }))
         this.hasUnreadNotifications = false
       } catch (error) {
         console.error('Error marking all notifications as read:', error)
@@ -379,11 +428,27 @@ export default {
       this.$router.push(`/${route}`)
     },
     goToSettings() {
-      this.$router.push('/profile')
+      if (this.userType === 'admin_perpustakaan') {
+        this.$router.push('/profile')
+        return
+      }
+      if (this.userType === 'admin_dpk') {
+        this.$router.push('/admin-dpk/profile')
+        return
+      }
+      if (this.userType === 'executive') {
+        this.$router.push('/executive/dashboard')
+        return
+      }
+      this.$router.push('/dashboard')
     },
     logout() {
       localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
       sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       this.$router.push('/login')
     },
     navigateToNotifications() {
@@ -520,10 +585,7 @@ html, body {
   left: 0;
   display: flex;
   flex-direction: column;
-  z-index: 998;
-  padding: 0;
-  height: calc(100vh - 70px);
-  margin-top: 0;
+  justify-content: space-between;
 }
 
 .sidebar-logo-group {
@@ -536,65 +598,33 @@ html, body {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem;
-  padding-top: 1rem;
-  flex: 1 0 auto;
 }
 
 .sidebar-logout-btn {
-  margin-top: auto;
-  margin-bottom: 1.5rem;
-  margin-left: 1rem;
-  margin-right: 1rem;
-  background: #0E2954;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  background: transparent;
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 0.75rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 1rem;
-  font-weight: 500;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.sidebar-logout-btn:hover {
-  background: #1a3a6e;
 }
 
 .nav-btn {
   width: 100%;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
   text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 .nav-btn.active {
   background-color: #4318FF;
-}
-
-.nav-btn i {
-  width: 20px;
-  transition: transform 0.2s ease;
-}
-
-.nav-btn:hover i {
-  transform: scale(1.1);
 }
 
 .dashboard-content {
@@ -756,9 +786,9 @@ html, body {
     transform: translateX(-100%);
     width: 250px;
     position: fixed;
-    top: 60px;
+    top: 70px;
     left: 0;
-    height: calc(100vh - 60px);
+    height: calc(100vh - 70px);
     z-index: 999;
     background-color: #0E2954;
     overflow-y: auto;
@@ -844,7 +874,7 @@ html, body {
 .sidebar-overlay {
   display: none;
   position: fixed;
-  top: 60px;
+  top: 70px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -929,6 +959,19 @@ html, body {
   min-height: calc(100vh - 70px);
   margin-top: 70px;
   margin-left: 250px;
+  color: #1f2937;
+}
+
+.dashboard-content h2 {
+  color: #0f172a;
+}
+
+.dashboard-content h3,
+.dashboard-content h4,
+.dashboard-content p,
+.dashboard-content label,
+.dashboard-content span {
+  color: inherit;
 }
 
 .filter-section {

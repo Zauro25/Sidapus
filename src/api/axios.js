@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -14,9 +16,6 @@ api.interceptors.request.use(
     const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-      console.log('[AXIOS] JWT token attached:', token)
-    } else {
-      console.log('[AXIOS] No JWT token found')
     }
     return config
   },
@@ -30,9 +29,12 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error.response && error.response.status === 401) {
-      // Handle unauthorized
       localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
       sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       window.location.href = '/login'
     }
     return Promise.reject(error)

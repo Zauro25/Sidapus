@@ -66,7 +66,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../api/axios'
 
 export default {
   data() {
@@ -83,63 +83,68 @@ export default {
       isSubmitting: false
     }
   },
-  methods: {
-    async handleLogin() {
-    this.isSubmitting = true;
-
-    try {
-      const response = await axios.post('http://localhost:8080/login', {
-        username: this.form.username,
-        password: this.form.password
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      // Pastikan struktur response sesuai
-      const { token, user_type: userType, user } = response.data;
-
-      if (!token || !userType) {
-        throw new Error('Response tidak valid dari server');
-      }
-
-      // Simpan data login
-      const storage = this.form.rememberMe ? localStorage : sessionStorage;
-      storage.setItem('authToken', token);
-      storage.setItem('userType', userType);
-      storage.setItem('userData', JSON.stringify(user));
-
-      // Redirect berdasarkan role
-      this.redirectBasedOnRole(userType);
-      
-    } catch (error) {
-      console.error('Login error:', error);
-      
-      // Error handling yang lebih baik
-      let errorMsg = 'Login gagal. Silakan coba lagi.';
-      
-      if (error.response) {
-        // Error dari server
-        errorMsg = error.response.data.error || errorMsg;
-      } else if (error.request) {
-        // Tidak dapat terhubung ke server
-        errorMsg = 'Tidak dapat terhubung ke server. Periksa koneksi Anda.';
-      } else {
-        // Error lain
-        errorMsg = error.message || errorMsg;
-      }
-      
-      alert(errorMsg);
-    } finally {
-      this.isSubmitting = false;
+  computed: {
+    hasErrors() {
+      return Boolean(this.errors.username || this.errors.password)
     }
   },
+  methods: {
+    validateEmail() {
+      this.errors.username = this.form.username ? '' : 'Username/email wajib diisi'
+    },
+    validatePassword() {
+      this.errors.password = this.form.password ? '' : 'Password wajib diisi'
+    },
+    async handleLogin() {
+      this.validateEmail()
+      this.validatePassword()
+      if (this.hasErrors) return
 
-  redirectBasedOnRole(userType) {
+      this.isSubmitting = true
+
+      try {
+        const response = await api.post('/login', {
+          username: this.form.username,
+          password: this.form.password
+        })
+
+        const { token, user_type: userType, user } = response.data
+
+        if (!token || !userType) {
+          throw new Error('Response tidak valid dari server')
+        }
+
+        const storage = this.form.rememberMe ? localStorage : sessionStorage
+        const secondaryStorage = this.form.rememberMe ? sessionStorage : localStorage
+
+        secondaryStorage.removeItem('authToken')
+        secondaryStorage.removeItem('userType')
+        secondaryStorage.removeItem('userData')
+
+        storage.setItem('authToken', token)
+        storage.setItem('userType', userType)
+        storage.setItem('userData', JSON.stringify(user || {}))
+
+        this.redirectBasedOnRole(userType)
+      } catch (error) {
+        let errorMsg = 'Login gagal. Silakan coba lagi.'
+        if (error.response) {
+          errorMsg = error.response.data?.error || errorMsg
+        } else if (error.request) {
+          errorMsg = 'Tidak dapat terhubung ke server. Periksa koneksi Anda.'
+        } else {
+          errorMsg = error.message || errorMsg
+        }
+        alert(errorMsg)
+      } finally {
+        this.isSubmitting = false
+      }
+    },
+
+    redirectBasedOnRole(userType) {
     let route = '/';
     
-    switch(userType.toLowerCase()) { // Gunakan toLowerCase untuk lebih aman
+    switch((userType || '').toLowerCase()) {
       case 'admin_perpustakaan':
         route = '/dashboard';
         break;
@@ -151,27 +156,6 @@ export default {
         break;
       default:
        console.error(`Role tidak dikenali: ${userType}`);
-        return;
-    }
-    
-    this.$router.push(route);
-  },
-  
-  redirectBasedOnRole(userType) {
-    let route = '/';
-    
-    switch(userType) {
-      case 'admin_perpustakaan':
-        route = '/dashboard';
-        break;
-      case 'admin_dpk':
-        route = '/admin-dpk/dashboard';
-        break;
-      case 'executive':
-        route = '/executive/dashboard';
-        break;
-      default:
-        console.error(`Role tidak dikenali: ${userType}`);
         return;
     }
     

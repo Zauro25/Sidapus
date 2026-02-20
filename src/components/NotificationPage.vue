@@ -16,7 +16,7 @@
         <h1>Sistem Data Perpustakaan<br>Dan Kearsipan</h1>
       </div>
       <div class="header-right">
-        <div class="notification-btn active" @click="navigateToNotifications">
+        <div class="notification-btn" @click="navigateToNotifications">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -24,7 +24,7 @@
           <span v-if="hasUnreadNotifications" class="notification-dot"></span>
         </div>
         <div class="profile-btn" @click="goToSettings">
-          <span>Admin Perpustakaan</span>
+          <span>{{ profileLabel }}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>
@@ -38,17 +38,32 @@
       <!-- Sidebar -->
       <aside class="sidebar" :class="{ 'active': isSidebarOpen }">
         <nav class="sidebar-menu">
-          <button class="nav-btn" @click="navigateTo('dashboard')">
+          <button class="nav-btn" @click="goToDashboardByRole">
             <span>Dashboard</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('input-update')">
+          <button v-if="isAdminPerpustakaan" class="nav-btn" @click="navigateTo('input-update')">
             <span>Input & Update Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('pengiriman')">
+          <button v-if="isAdminPerpustakaan" class="nav-btn" @click="navigateTo('pengiriman')">
             <span>Pengiriman Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('validasi')">
-            <span>Validasi dan Revisi dari DPK</span>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/verifikasi-user')">
+            <span>Verifikasi Admin Perpus</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/verifikasi-data')">
+            <span>Verifikasi Data</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/laporan')">
+            <span>Laporan</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/pengaturan-akun')">
+            <span>Pengaturan Akun</span>
+          </button>
+          <button v-if="isAdminDPK" class="nav-btn" @click="navigateTo('admin-dpk/profile')">
+            <span>Profile Pengguna</span>
+          </button>
+          <button class="nav-btn active" @click="navigateTo('notifications')">
+            <span>Notifikasi</span>
           </button>
         </nav>
         <button class="sidebar-logout-btn" @click="logout">
@@ -66,8 +81,12 @@
       <!-- Main Section -->
       <main class="main-section">
         <h2 class="page-title">Notifikasi</h2>
-        
-        <div class="notifications-container">
+
+        <div v-if="isLoading" class="state-message">Memuat notifikasi...</div>
+        <div v-else-if="loadError" class="state-message error">{{ loadError }}</div>
+        <div v-else-if="notifications.length === 0" class="state-message empty">Belum ada notifikasi.</div>
+
+        <div v-else class="notifications-container">
           <div 
             v-for="notification in notifications" 
             :key="notification.id"
@@ -109,6 +128,7 @@
 <script>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import api from '../api/axios'
 
 export default {
   name: 'NotificationPage',
@@ -117,29 +137,99 @@ export default {
     const isSidebarOpen = ref(false)
     const hasUnreadNotifications = ref(true)
     const isMobile = ref(false)
-    const notifications = ref([
-        {
-          id: 1,
-          date: '18 Juni 2025, 14:30',
-          status: 'Perlu Revisi',
-          catatan: 'Data pengunjung dan SDM pustakawan perlu diperbaiki',
-          data: 'Pengunjung: 50, SDM: Kosong'
-        },
-        {
-          id: 2,
-          date: '15 Juni 2025, 09:15',
-          status: 'Dikirim untuk Verifikasi',
-          data: 'Semester 2 2024 - Semua data valid'
-        },
-        {
-          id: 3,
-          date: '10 Juni 2025, 16:45',
-          status: 'Data Disetujui',
-          data: 'Semester 2 2024 - Semua data valid'
+    const notifications = ref([])
+    const isLoading = ref(false)
+    const loadError = ref('')
+    const profileLabel = ref('Pengguna')
+    const userType = ref('')
+    const isAdminPerpustakaan = ref(false)
+    const isAdminDPK = ref(false)
+
+    const formatDate = (value) => {
+      if (!value) return '-'
+      return new Date(value).toLocaleString('id-ID')
+    }
+
+    const fetchNotifications = async () => {
+      isLoading.value = true
+      loadError.value = ''
+      try {
+        let notifList = []
+        try {
+          const notifResponse = await api.get('/notifications', { params: { limit: 50 } })
+          notifList = Array.isArray(notifResponse.data) ? notifResponse.data : []
+        } catch {
+          notifList = []
         }
-    ])
+
+        if (userType.value === 'admin_perpustakaan' && notifList.length === 0) {
+          try {
+            const adminNotifResponse = await api.get('/admin-perpustakaan/notifications', { params: { limit: 50 } })
+            notifList = Array.isArray(adminNotifResponse.data) ? adminNotifResponse.data : []
+          } catch {
+            notifList = []
+          }
+        }
+
+        const fromNotifications = notifList.map(item => ({
+          id: `notif-${item.id || Math.random()}`,
+          date: formatDate(item.tanggal_kirim || item.created_at),
+          status: item.judul_notifikasi || item.jenis_notifikasi || item.status || 'Notifikasi',
+          catatan: item.isi_notifikasi || item.catatan || '',
+          data: item.related_type ? `Terkait: ${item.related_type}` : (item.data || '-'),
+          isRead: item.is_read ?? false,
+          rawDate: item.tanggal_kirim || item.created_at || ''
+        }))
+
+        let fromHistory = []
+        if (userType.value === 'admin_perpustakaan') {
+          let historyList = []
+          try {
+            const historyResponse = await api.get('/admin-perpustakaan/history')
+            historyList = Array.isArray(historyResponse.data) ? historyResponse.data : []
+          } catch {
+            historyList = []
+          }
+
+          fromHistory = historyList.map(item => ({
+            id: `history-${item.id}`,
+            date: formatDate(item.tanggal_verifikasi),
+            status: item.status || 'Verifikasi',
+            catatan: item.catatan_revisi || '',
+            data: item.jenis_data || 'Perpustakaan',
+            isRead: true,
+            rawDate: item.tanggal_verifikasi || ''
+          }))
+        }
+
+        notifications.value = [...fromNotifications, ...fromHistory].sort((a, b) => {
+          return new Date(b.rawDate || 0) - new Date(a.rawDate || 0)
+        })
+
+        hasUnreadNotifications.value = fromNotifications.some(item => !item.isRead)
+      } catch (error) {
+        console.error('Gagal memuat notifikasi:', error)
+        loadError.value = error.response?.data?.error || 'Gagal memuat notifikasi.'
+      } finally {
+        isLoading.value = false
+      }
+    }
 
     onMounted(() => {
+      userType.value = localStorage.getItem('userType') || sessionStorage.getItem('userType') || ''
+      isAdminPerpustakaan.value = userType.value === 'admin_perpustakaan'
+      isAdminDPK.value = userType.value === 'admin_dpk'
+      const userDataRaw = localStorage.getItem('userData') || sessionStorage.getItem('userData')
+      if (userDataRaw) {
+        try {
+          const userData = JSON.parse(userDataRaw)
+          profileLabel.value = userData.nama_lengkap || userData.username || userType.value
+        } catch {
+          profileLabel.value = userType.value || 'Pengguna'
+        }
+      }
+
+      fetchNotifications()
       checkMobile()
       window.addEventListener('resize', checkMobile)
       document.addEventListener('click', handleClickOutside)
@@ -170,15 +260,41 @@ export default {
       router.push(`/${route}`)
     }
 
+    const goToDashboardByRole = () => {
+      if (userType.value === 'admin_dpk') {
+        router.push('/admin-dpk/dashboard')
+        return
+      }
+      if (userType.value === 'executive') {
+        router.push('/executive/dashboard')
+        return
+      }
+      router.push('/dashboard')
+    }
+
     const navigateToNotifications = () => {
       router.push('/notifications')
     }
 
     const goToSettings = () => {
-      router.push('/settings')
+      if (userType.value === 'admin_dpk') {
+        router.push('/admin-dpk/profile')
+        return
+      }
+      if (userType.value === 'executive') {
+        goToDashboardByRole()
+        return
+      }
+      router.push('/profile')
     }
 
     const logout = () => {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
+      sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       router.push('/login')
     }
 
@@ -212,7 +328,13 @@ export default {
       isSidebarOpen,
       hasUnreadNotifications,
       notifications,
+      isLoading,
+      loadError,
+      profileLabel,
+      isAdminPerpustakaan,
+      isAdminDPK,
       toggleSidebar,
+      goToDashboardByRole,
       navigateTo,
       navigateToNotifications,
       goToSettings,
@@ -388,30 +510,24 @@ html, body {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem;
-  padding-top: 1rem;
 }
 
 .nav-btn {
   width: 100%;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
   text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .nav-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 .nav-btn.active {
@@ -419,32 +535,29 @@ html, body {
 }
 
 .sidebar-logout-btn {
+  width: 100%;
   padding: 0.75rem 1rem;
-  margin: 1rem;
-  margin-top: auto;
+  margin: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .sidebar-logout-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 /* Sidebar Overlay */
 .sidebar-overlay {
   display: none;
   position: fixed;
-  top: 0;
+  top: 70px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -467,10 +580,28 @@ html, body {
 .main-section {
   flex: 1;
   margin-left: 250px;
-  padding: 0;
+  padding: 1.5rem;
   background-color: #f8f9fa;
   min-height: calc(100vh - 70px);
   overflow-y: auto;
+}
+
+.state-message {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem;
+  color: #334155;
+}
+
+.state-message.error {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.state-message.empty {
+  background: #f8fafc;
 }
 
 /* Mobile Responsive */
@@ -523,6 +654,36 @@ html, body {
 
 .notification-card {
   font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left-width: 4px;
+  border-radius: 10px;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 1rem;
+}
+
+.notifications-container {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.notification-content {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.status-line,
+.note-line,
+.data-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .notification-date {

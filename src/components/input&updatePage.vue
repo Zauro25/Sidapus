@@ -47,8 +47,8 @@
           <button class="nav-btn" @click="navigateTo('pengiriman')">
             <span>Pengiriman Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('validasi')">
-            <span>Validasi dan Revisi dari DPK</span>
+          <button class="nav-btn" @click="navigateTo('notifications')">
+            <span>Notifikasi</span>
           </button>
         </nav>
         <button class="sidebar-logout-btn" @click="logout">
@@ -334,12 +334,16 @@ export default {
     }
 
     const goToSettings = () => {
-      router.push('/settings')
+      router.push('/profile')
     }
 
     const logout = () => {
       localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
       sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       router.push('/login')
     }
 
@@ -581,30 +585,24 @@ html, body {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem;
-  padding-top: 1rem;
 }
 
 .nav-btn {
   width: 100%;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
   text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .nav-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 .nav-btn.active {
@@ -612,32 +610,29 @@ html, body {
 }
 
 .sidebar-logout-btn {
+  width: 100%;
   padding: 0.75rem 1rem;
-  margin: 1rem;
-  margin-top: auto;
+  margin: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .sidebar-logout-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 /* Sidebar Overlay */
 .sidebar-overlay {
   display: none;
   position: fixed;
-  top: 0;
+  top: 70px;
   left: 0;
   right: 0;
   bottom: 0;

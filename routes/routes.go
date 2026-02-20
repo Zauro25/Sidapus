@@ -1,13 +1,13 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/controllers"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 func SetupRoutes(r *gin.Engine) {
-	
+
 	api := r.Group("")
 
 	// Public routes
@@ -15,7 +15,7 @@ func SetupRoutes(r *gin.Engine) {
 	api.POST("/register", controllers.Register)
 	api.POST("/register-admin-dpk", controllers.RegisterAdminDPK)
 	api.POST("/register-executive", controllers.RegisterExecutive)
-	
+
 	// Protected routes
 	protected := api.Group("/")
 	protected.Use(middleware.AuthMiddleware())
@@ -35,7 +35,7 @@ func SetupRoutes(r *gin.Engine) {
 		adminPerpus.GET("/data/:id", controllers.GetPerpustakaanByID)
 		adminPerpus.PUT("/data", controllers.UpdateDataPerpustakaan)
 		adminPerpus.POST("/input-data", controllers.InputDataPerpustakaan)
-		adminPerpus.POST("data/:id/send-data", controllers.SendDataToDPK)
+		adminPerpus.POST("/data/:id/send-data", controllers.SendDataToDPK)
 		adminPerpus.GET("/history", controllers.GetHistoryPengiriman)
 		adminPerpus.GET("/notifications", controllers.GetNotifications)
 		adminPerpus.PUT("/notifications/:id/read", controllers.MarkNotificationAsRead)
@@ -55,12 +55,13 @@ func SetupRoutes(r *gin.Engine) {
 		adminDPK.GET("/verifikasiakun", controllers.GetPendingVerification)
 		adminDPK.POST("/verifikasiakun", controllers.VerifyAdminPerpustakaan)
 		adminDPK.POST("/laporan", controllers.GenerateLaporan)
+		adminDPK.GET("/laporan", controllers.GetLaporanList)
 		adminDPK.GET("/laporan/:id/download", controllers.DownloadLaporan)
 		adminDPK.POST("/notifications/broadcast", controllers.SendBroadcastNotification)
 		adminDPK.GET("/audit-logs", controllers.GetAuditLogs)
 		adminDPK.POST("/send-reminder", controllers.SendReminder)
 		adminDPK.GET("/statistics", controllers.GetStatistics)
-		
+
 		// Admin perpustakaan management
 		adminDPK.GET("/pending-admin-verifications", controllers.GetPendingAdminVerifications)
 		adminDPK.POST("/verify-admin-perpustakaan", controllers.VerifyAdminPerpustakaan)
@@ -85,4 +86,6 @@ func SetupRoutes(r *gin.Engine) {
 	// Common routes (accessible by all authenticated users)
 	protected.GET("/notifications", controllers.GetNotifications)
 	protected.PUT("/notifications/:id/read", controllers.MarkNotificationAsRead)
+	protected.PUT("/notifications/read-all", controllers.MarkAllNotificationsAsRead)
+	protected.GET("/notifications/count", controllers.GetNotificationCount)
 }

@@ -47,11 +47,13 @@ export const useProfileStore = defineStore('profile', () => {
         email: profileData.email,
         no_telepon: profileData.no_telepon
       })
+
+      const updatedUser = response.data?.user || {}
       userProfile.value = {
         ...userProfile.value,
-        nama_lengkap: response.data.nama_lengkap,
-        email: response.data.email,
-        no_telepon: response.data.no_telepon
+        nama_lengkap: updatedUser.nama_lengkap ?? userProfile.value.nama_lengkap,
+        email: updatedUser.email ?? userProfile.value.email,
+        no_telepon: updatedUser.no_telepon ?? userProfile.value.no_telepon
       }
       return response.data
     } catch (err) {

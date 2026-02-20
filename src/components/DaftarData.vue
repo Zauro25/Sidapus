@@ -47,8 +47,8 @@
           <button class="nav-btn" @click="navigateTo('pengiriman')">
             <span>Pengiriman Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('validasi')">
-            <span>Validasi dan Revisi dari DPK</span>
+          <button class="nav-btn" @click="navigateTo('notifications')">
+            <span>Notifikasi & Revisi</span>
           </button>
         </nav>
         <button class="sidebar-logout-btn" @click="logout">
@@ -245,10 +245,16 @@ export default {
     }
 
     const goToSettings = () => {
-      router.push('/settings')
+      router.push('/profile')
     }
 
     const logout = () => {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
+      sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       router.push('/login')
     }
 

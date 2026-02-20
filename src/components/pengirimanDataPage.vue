@@ -46,8 +46,8 @@
           <button class="nav-btn active">
             <span>Pengiriman Data</span>
           </button>
-          <button class="nav-btn" @click="navigateTo('validasi')">
-            <span>Validasi dan Revisi dari DPK</span>
+          <button class="nav-btn" @click="navigateTo('notifications')">
+            <span>Notifikasi</span>
           </button>
         </nav>
         <button class="sidebar-logout-btn" @click="logout">
@@ -80,6 +80,7 @@
                     <th>Nama Kepala</th>
                     <th>Tahun Berdiri</th>
                     <th>Status</th>
+                    <th>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -90,7 +91,7 @@
                           type="checkbox" 
                           :id="'checkbox-' + index"
                           v-model="selectedItems[index]"
-                          :disabled="item.status === 'Sudah Dikirim'"
+                          :disabled="item.status_verifikasi === 'Terkirim' || item.status_verifikasi === 'Disetujui'"
                         >
                         <label :for="'checkbox-' + index">{{ formatPeriode(item.periode) }}</label>
                       </div>
@@ -101,15 +102,49 @@
                     <td>
                       <span 
                         class="status-badge"
-                        :class="{ 'sent': item.status_verifikasi === 'Terkirim' }"
+                        :class="{
+                          'sent': item.status_verifikasi === 'Terkirim',
+                          'revision': item.status_verifikasi === 'Direvisi',
+                          'approved': item.status_verifikasi === 'Disetujui'
+                        }"
                       >
-                        {{ item.status_verifikasi === 'Terkirim' ? 'Sudah Dikirim' : 'Belum Dikirim' }}
+                        {{
+                          item.status_verifikasi === 'Terkirim'
+                            ? 'Sudah Dikirim'
+                            : item.status_verifikasi === 'Direvisi'
+                              ? 'Revisi'
+                              : item.status_verifikasi === 'Disetujui'
+                                ? 'Disetujui'
+                                : 'Belum Dikirim'
+                        }}
                       </span>
 
+                    </td>
+                    <td>
+                      <div v-if="item.status_verifikasi === 'Direvisi'" class="revision-actions">
+                        <button class="mini-btn detail" @click="openRevisionDetail(item)">Lihat Revisi</button>
+                        <button class="mini-btn edit" @click="goToRevise(item)">Ubah Data</button>
+                      </div>
+                      <span v-else class="no-action">-</span>
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div v-if="showRevisionModal" class="modal-overlay" @click.self="closeRevisionModal">
+            <div class="modal-card">
+              <h3>Detail Revisi</h3>
+              <p class="modal-subtitle">{{ selectedRevisionData?.nama_perpustakaan || '-' }}</p>
+              <div class="revision-detail-content">
+                <strong>Catatan Revisi:</strong>
+                <p>{{ selectedRevisionData?.catatan_revisi || 'Tidak ada catatan revisi.' }}</p>
+              </div>
+              <div class="modal-actions">
+                <button class="btn btn-cancel" @click="closeRevisionModal">Tutup</button>
+                <button class="btn btn-send" @click="goToRevise(selectedRevisionData)">Ubah Data</button>
+              </div>
             </div>
           </div>
 
@@ -149,6 +184,8 @@ export default {
     const isSidebarOpen = ref(false)
     const hasUnreadNotifications = ref(true)
     const isMobile = ref(false)
+    const showRevisionModal = ref(false)
+    const selectedRevisionData = ref(null)
 
     // Computed property to get library data grouped by period
     const libraryDataByPeriod = computed(() => {
@@ -223,11 +260,32 @@ export default {
     }
 
     const goToSettings = () => {
-      router.push('/settings')
+      router.push('/profile')
     }
 
     const logout = () => {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userData')
+      sessionStorage.removeItem('authToken')
+      sessionStorage.removeItem('userType')
+      sessionStorage.removeItem('userData')
       router.push('/login')
+    }
+
+    const openRevisionDetail = (item) => {
+      selectedRevisionData.value = item
+      showRevisionModal.value = true
+    }
+
+    const closeRevisionModal = () => {
+      showRevisionModal.value = false
+      selectedRevisionData.value = null
+    }
+
+    const goToRevise = (item) => {
+      if (!item?.id) return
+      router.push({ path: '/input-update', query: { edit: item.id } })
     }
 
     onMounted(async () => {
@@ -260,6 +318,8 @@ export default {
       isSidebarOpen,
       libraries: libraryStore.libraries,
       hasUnreadNotifications,
+      showRevisionModal,
+      selectedRevisionData,
       libraryDataByPeriod,
       hasSelectedItems,
       formatPeriode,
@@ -270,6 +330,9 @@ export default {
       navigateToNotifications,
       goToSettings,
       logout
+      ,openRevisionDetail,
+      closeRevisionModal,
+      goToRevise
     }
   }
 }
@@ -419,30 +482,24 @@ export default {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem;
-  padding-top: 1rem;
 }
 
 .nav-btn {
   width: 100%;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
   text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .nav-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 .nav-btn.active {
@@ -450,32 +507,29 @@ export default {
 }
 
 .sidebar-logout-btn {
+  width: 100%;
   padding: 0.75rem 1rem;
-  margin: 1rem;
-  margin-top: auto;
+  margin: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: white;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   font-family: inter, sans-serif;
   font-size: 1rem;
 }
 
 .sidebar-logout-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
 }
 
 /* Sidebar Overlay */
 .sidebar-overlay {
   display: none;
   position: fixed;
-  top: 0;
+  top: 70px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -563,6 +617,7 @@ td {
   padding: 1rem;
   border-bottom: 1px solid #e2e8f0;
   color: #1e293b;
+  vertical-align: middle;
 }
 
 tr:hover {
@@ -645,6 +700,84 @@ tr:hover {
 .status-badge.sent {
   background-color: #dcfce7;
   color: #16a34a;
+}
+
+.status-badge.revision {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.approved {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.revision-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mini-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.mini-btn.detail {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.mini-btn.edit {
+  background: #2563eb;
+  color: #fff;
+}
+
+.no-action {
+  color: #94a3b8;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1rem;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 540px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+}
+
+.modal-subtitle {
+  margin: 0.2rem 0 1rem;
+  color: #475569;
+}
+
+.revision-detail-content {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.8rem;
+  color: #1f2937;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  margin-top: 1rem;
+  padding: 0;
 }
 
 .action-buttons {

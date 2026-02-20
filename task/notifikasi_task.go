@@ -2,10 +2,12 @@ package tasks
 
 import (
 	"log"
+	"strconv"
+	"time"
+
 	"github.com/Zauro25/Capstone-PerpusKominfosan/config"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/models"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/services"
-	"time"
 )
 
 func StartNotificationTasks() {
@@ -53,5 +55,5 @@ func getCurrentSemester() string {
 	if now.Month() >= 7 {
 		semester = "2"
 	}
-	return string(year) + "-" + semester
+	return strconv.Itoa(year) + "-" + semester
 }

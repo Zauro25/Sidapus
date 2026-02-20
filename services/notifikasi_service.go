@@ -1,13 +1,30 @@
 package services
 
 import (
-	"gorm.io/gorm"
-	"github.com/Zauro25/Capstone-PerpusKominfosan/models"
 	"time"
+
+	"github.com/Zauro25/Capstone-PerpusKominfosan/models"
+	"gorm.io/gorm"
 )
 
 type NotificationService struct {
 	db *gorm.DB
+}
+
+func (s *NotificationService) getAdminPerpustakaanUserID(perpustakaanID uint) *uint {
+	var perpustakaan models.Perpustakaan
+	if err := s.db.Select("id", "created_by").First(&perpustakaan, perpustakaanID).Error; err == nil && perpustakaan.CreatedBy != 0 {
+		var createdByAdmin models.AdminPerpustakaan
+		if err := s.db.First(&createdByAdmin, perpustakaan.CreatedBy).Error; err == nil {
+			return &createdByAdmin.ID
+		}
+	}
+
+	var admin models.AdminPerpustakaan
+	if err := s.db.Where("perpustakaan_id = ?", perpustakaanID).Order("id asc").First(&admin).Error; err != nil {
+		return nil
+	}
+	return &admin.ID
 }
 
 func NewNotificationService(db *gorm.DB) *NotificationService {
@@ -26,8 +43,16 @@ func (s *NotificationService) CreateNotification(notification *models.Notifikasi
 func (s *NotificationService) GetUserNotifications(userID uint, userType string, limit int, unreadOnly bool) ([]models.Notifikasi, error) {
 	var notifications []models.Notifikasi
 
-	query := s.db.Where("(tujuan_user = ? OR tujuan_user = 'all') AND (user_id = ? OR user_id IS NULL)", 
+	query := s.db.Where("(tujuan_user = ? OR tujuan_user = 'all') AND (user_id = ? OR user_id IS NULL)",
 		userType, userID)
+
+	if userType == "admin_perpustakaan" {
+		query = query.Or(`
+			(tujuan_user = ? AND related_type = 'perpustakaan' AND related_id IN (
+				SELECT id FROM perpustakaans WHERE created_by = ?
+			))
+		`, userType, userID)
+	}
 
 	if unreadOnly {
 		query = query.Where("is_read = ?", false)
@@ -51,7 +76,7 @@ func (s *NotificationService) MarkAsRead(notificationID uint, userID uint) error
 // MarkAllAsRead menandai semua notifikasi user sebagai telah dibaca
 func (s *NotificationService) MarkAllAsRead(userID uint, userType string) error {
 	return s.db.Model(&models.Notifikasi{}).
-		Where("(tujuan_user = ? OR tujuan_user = 'all') AND (user_id = ? OR user_id IS NULL) AND is_read = ?", 
+		Where("(tujuan_user = ? OR tujuan_user = 'all') AND (user_id = ? OR user_id IS NULL) AND is_read = ?",
 			userType, userID, false).
 		Update("is_read", true).Error
 }
@@ -81,9 +106,9 @@ func (s *NotificationService) SendVerificationNotification(perpustakaanID uint, 
 		IsiNotifikasi:   isi,
 		JenisNotifikasi: jenis,
 		TujuanUser:      "admin_perpustakaan",
-		UserID:         &perpustakaan.ID,
-		RelatedID:      &perpustakaanID,
-		RelatedType:    "perpustakaan",
+		UserID:          s.getAdminPerpustakaanUserID(perpustakaanID),
+		RelatedID:       &perpustakaanID,
+		RelatedType:     "perpustakaan",
 		TanggalKirim:    time.Now(),
 		ExpiredAt:       time.Now().Add(30 * 24 * time.Hour), // Expire dalam 30 hari
 		ActionLink:      "/admin-perpustakaan/data?status=revision",
@@ -104,9 +129,9 @@ func (s *NotificationService) SendDataSubmittedNotification(perpustakaanID uint)
 		IsiNotifikasi:   "Data perpustakaan " + perpustakaan.NamaPerpustakaan + " telah berhasil dikirim ke DPK untuk verifikasi",
 		JenisNotifikasi: "success",
 		TujuanUser:      "admin_perpustakaan",
-		UserID:         &perpustakaan.ID,
-		RelatedID:      &perpustakaanID,
-		RelatedType:    "perpustakaan",
+		UserID:          s.getAdminPerpustakaanUserID(perpustakaanID),
+		RelatedID:       &perpustakaanID,
+		RelatedType:     "perpustakaan",
 		TanggalKirim:    time.Now(),
 		ExpiredAt:       time.Now().Add(7 * 24 * time.Hour),
 	}
@@ -126,9 +151,9 @@ func (s *NotificationService) SendReminderNotification(perpustakaanID uint, mess
 		IsiNotifikasi:   message,
 		JenisNotifikasi: "warning",
 		TujuanUser:      "admin_perpustakaan",
-		UserID:         &perpustakaan.ID,
-		RelatedID:      &perpustakaanID,
-		RelatedType:    "perpustakaan",
+		UserID:          s.getAdminPerpustakaanUserID(perpustakaanID),
+		RelatedID:       &perpustakaanID,
+		RelatedType:     "perpustakaan",
 		TanggalKirim:    time.Now(),
 		ExpiredAt:       time.Now().Add(7 * 24 * time.Hour),
 		ActionLink:      "/admin-perpustakaan/data",

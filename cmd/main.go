@@ -4,18 +4,19 @@ import (
 	"log"
 	"os"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+	"context"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/Zauro25/Capstone-PerpusKominfosan/config"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/middleware"
 	"github.com/Zauro25/Capstone-PerpusKominfosan/routes"
-	"github.com/Zauro25/Capstone-PerpusKominfosan/task"
-	"time"
-	"net/http"
-	"context"
-	"os/signal"
-	"syscall"
+	tasks "github.com/Zauro25/Capstone-PerpusKominfosan/task"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -39,16 +40,16 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
-	
+
 	if os.Getenv("ENV") == "development" {
 		corsConfig.AllowOrigins = []string{"*"} // Lebih permisif di development
 	}
-	
+
 	r.Use(cors.New(corsConfig))
 
 	// Middleware tambahan
 	r.Use(middleware.AuditLogMiddleware()) // Middleware untuk logging
-	r.Use(gin.Recovery()) // Middleware recovery bawaan Gin
+	r.Use(gin.Recovery())                  // Middleware recovery bawaan Gin
 
 	// Jalankan scheduled tasks jika bukan environment test
 	if os.Getenv("ENV") != "test" {
@@ -61,8 +62,9 @@ func main() {
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status": "ok",
-			"env":    os.Getenv("ENV"),
+			"status":       "ok",
+			"env":          os.Getenv("ENV"),
+			"auto_migrate": os.Getenv("AUTO_MIGRATE"),
 		})
 	})
 
@@ -79,7 +81,7 @@ func main() {
 	}
 
 	log.Printf("Server starting on port %s in %s mode", port, os.Getenv("ENV"))
-	
+
 	// Jalankan server di goroutine untuk handle graceful shutdown
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -96,7 +98,7 @@ func main() {
 	// Context dengan timeout untuk shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
